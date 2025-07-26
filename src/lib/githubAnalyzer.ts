@@ -279,8 +279,8 @@ async function fetchCommits(owner: string, repo: string, limit: number = 30) {
 function detectLovableGeneration(metadata: any, commits: any[], allFiles: GitHubFile[]): { isLovable: boolean; indicators: string[] } {
   const indicators: string[] = [];
   
-  // Check repository description
-  if (metadata.description?.toLowerCase().includes('lovable')) {
+  // Check repository description (only if metadata is available)
+  if (metadata?.description?.toLowerCase().includes('lovable')) {
     indicators.push('Repository description mentions Lovable');
   }
   
@@ -380,13 +380,23 @@ export async function analyzeGitHubRepository(
   
   const [, owner, repo] = urlMatch;
   
-  // Fetch repository metadata and commits for Lovable detection
-  onProgress?.(0, 1, 'Fetching repository metadata...');
-  const [metadata, commits, allFiles] = await Promise.all([
-    fetchRepositoryMetadata(owner, repo),
-    fetchCommits(owner, repo),
-    getAllFiles(owner, repo)
-  ]);
+  // Fetch all files first (core functionality)
+  onProgress?.(0, 1, 'Fetching repository structure...');
+  const allFiles = await getAllFiles(owner, repo);
+  
+  // Try to fetch metadata and commits for Lovable detection (optional)
+  let metadata = null;
+  let commits: any[] = [];
+  
+  try {
+    onProgress?.(0, 1, 'Fetching repository metadata...');
+    [metadata, commits] = await Promise.all([
+      fetchRepositoryMetadata(owner, repo).catch(() => null),
+      fetchCommits(owner, repo).catch(() => [])
+    ]);
+  } catch (error) {
+    console.warn('Could not fetch repository metadata for Lovable detection:', error);
+  }
   
   // Filter files we can analyze
   const analyzeableFiles = allFiles.filter(file => 
